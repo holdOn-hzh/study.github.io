@@ -101,7 +101,7 @@
 	   socketChannel.read(allocate);
 	5. 释放资源
 		socketChannel.close();
-   
+
 ###	Selector (选择器)
 	1.可以用一个线程处理多个的客户端连接，使用NIO的Selector(选择器). Selector 能够检测多个注册的服务端
 	  通道上是否有事件发生，如果有事件发生，便获取事件然后针对每个事件进行相应的处理。这样就可以只用一个
@@ -120,21 +120,70 @@
 		（2）SelectionKey.isConnectable(): 是否是连接就绪事件
 		（3）SelectionKey.isReadable(): 是否是读就绪事件
 		（4）SelectionKey.isWritable(): 是否是写就绪事件
-		
+
 ###	Selector（服务端实现步骤）
-	1. 打开一个服务端通道
-	2. 绑定对应的端口号
-	3. 通道默认是阻塞的，需要设置为非阻塞
-	4. 创建选择器
-	5. 将服务端通道注册到选择器上,并指定注册监听的事件为OP_ACCEPT
-	6. 检查选择器是否有事件
-	7. 获取事件集合
-	8. 判断事件是否是客户端连接事件SelectionKey.isAcceptable()
-	9. 得到客户端通道,并将通道注册到选择器上, 并指定监听事件为OP_READ
-	10. 判断是否是客户端读就绪事件SelectionKey.isReadable()
-	11. 得到客户端通道,读取数据到缓冲区
-	12. 给客户端回写数据
-	13. 从集合中删除对应的事件, 因为防止二次处理.		
+	public static void main(String[] args) throws IOException {
+	        //1.创建服务端连接通道
+	        ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
+	        //2.绑定对应的端口
+	        serverSocketChannel.bind(new InetSocketAddress(9999));
+	        //3.设置通道为非阻塞
+	        serverSocketChannel.configureBlocking(false);
+	        //4.创建选择器，供后面通道注册
+	        Selector selector = Selector.open();
+	        /**
+	         * 5.将服务端通断注册到Select选择器中,并指定连接准备就绪事件
+	         * 描述：当注册了连接准备就绪后，Select就会扫描来自客户端的连接，
+	         *      将连接添加到我们这个selector选择器中
+	         */
+	        serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+	
+	        //持续运行程序对事件进行一个处理
+	        while (true) {
+	            /**
+	             * 6. 检查选择器是否有事件
+	             * 我们传入的这个2000的这个参数是个时间参数，表示多少时间内获取到对应的事件
+	             */
+	            int select = selector.select(2000);
+	            if (select <= 0) continue;
+	
+	            //7.获取对应的事件合集，对对其进行迭代处理
+	            Set<SelectionKey> selectionKeys = selector.selectedKeys();
+	            Iterator<SelectionKey> iterator = selectionKeys.iterator();
+	            while (iterator.hasNext()) {
+	                SelectionKey next = iterator.next();
+	                // 8. 判断事件是否是客户端连接事件SelectionKey.isAcceptable()
+	                if (next.isAcceptable()) {
+	                    /**
+	                     * 9.得到客户端通道，将其设置为非阻塞，将其注册到Selector选择器中并指定为读事件
+	                     * 描述：1.我们将原本的接受客户端连接的步骤移动到这里。
+	                     *      2.为什么是读事件？因为我们现在是处于服务端的角度，
+	                     *        所以我们需要读取来自客户端的数据。
+	                     */
+	                    SocketChannel accept = serverSocketChannel.accept();
+	                    accept.configureBlocking(false);
+	                    accept.register(selector, SelectionKey.OP_READ);
+	                }
+	                if (next.isReadable()) {
+	                    //10.判断当前事件是否属于读事件，
+	                    //   如果是的话我们可以通过这个selectionKey对象获取对应的channal
+	                    SocketChannel channel = (SocketChannel)next.channel();
+	                    //11.获取客户端通道中的数据
+	                    ByteBuffer buffer = ByteBuffer.allocate(1024);
+	                    int read = channel.read(buffer);
+	                    if (read>0) {
+	                        System.out.println("收到客户端的数据" + 
+	                        new String(buffer.array(), StandardCharsets.UTF_8));
+	                        //12. 给客户端回写数据
+	                        channel.write(ByteBuffer.wrap("你好".getBytes(StandardCharsets.UTF_8)));
+	                    }
+	                    channel.close();
+	                }
+	                //13.删除当前事件，防止二次处理
+	                iterator.remove();
+	            }
+	        }
+	    }
 
 
 
@@ -162,12 +211,10 @@
 
 
 
-		
-	  
-   
 
-   
+​	  
 
-   
 
-   
+
+
+
